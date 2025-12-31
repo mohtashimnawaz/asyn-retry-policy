@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
-fn is_retryable(err: &str) -> bool { err == "tmp" }
-fn never_retry(_: &str) -> bool { false }
+fn is_retryable(err: &&str) -> bool { *err == "tmp" }
+fn never_retry(_: &&str) -> bool { false }
 
 #[asyn_retry_policy::retry(attempts = 3, predicate = is_retryable)]
 async fn macro_predicate_works(tries: Arc<AtomicU8>) -> Result<u8, &'static str> {

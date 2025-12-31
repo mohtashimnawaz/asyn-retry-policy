@@ -80,7 +80,7 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
                             Expr::Lit(syn::ExprLit { lit: Lit::Str(lits), .. }) => {
                                 // Parse string into a path
                                 let s = lits.value();
-                                match s.parse::<syn::Path>() {
+                                match syn::parse_str::<syn::Path>(&s) {
                                     Ok(p) => predicate_expr = Some(Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: p })),
                                     Err(_) => return syn::Error::new_spanned(lits, "invalid path in string").to_compile_error().into(),
                                 }

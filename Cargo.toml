@@ -25,4 +25,4 @@ rand = { version = "0.8", features = ["small_rng"] }
 thiserror = "1.0"
 
 # Proc-macro crate providing the `#[retry]` attribute
-asyn-retry-policy-macro = { path = "asyn-retry-policy-macro" }
+asyn-retry-policy-macro = "0.1.0"

@@ -7,8 +7,8 @@ homepage = "https://github.com/YOUR_GITHUB_USER/asyn-retry-policy"
 repository = "https://github.com/YOUR_GITHUB_USER/asyn-retry-policy"
 documentation = "https://docs.rs/asyn-retry-policy-macro"
 license = "MIT"
-license-file = "LICENSE"
-authors = ["Your Name <you@example.com>"]
+license-file = "../LICENSE"
+authors = ["Mohtashim Nawaz"]
 
 [lib]
 proc-macro = true

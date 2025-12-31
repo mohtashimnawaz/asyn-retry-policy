@@ -1,29 +1,52 @@
 //! A small crate providing an async retry policy with exponential backoff and jitter.
 //!
-//! Example:
+//! Example: programmatic and macro usage (predicate-aware)
 //!
 //! ```no_run
 //! use asyn_retry_policy::RetryPolicy;
 //! use std::time::Duration;
+//! use std::sync::{Arc, atomic::{AtomicU8, Ordering}};
 //!
+//! // Programmatic usage with a predicate that inspects the error type (`String` here)
 //! #[tokio::main]
 //! async fn main() {
-//!     let policy = RetryPolicy::default();
-//!     let tries = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0));
+//!     // predicate gets an `&E`, so when `E = String` it's `&String`.
+//!     fn is_retryable(e: &String) -> bool { e == "temporary" }
+//!
+//!     let mut policy = RetryPolicy::default();
+//!     policy.attempts = 5;
+//!     policy.jitter = false;
+//!
+//!     let tries = Arc::new(AtomicU8::new(0));
 //!     let res = policy.retry(
 //!         {
 //!             let tries = tries.clone();
 //!             move || {
 //!                 let tries = tries.clone();
 //!                 async move {
-//!                     let prev = tries.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-//!                     if prev < 2 { Err::<(), _>("fail") } else { Ok(()) }
+//!                     let prev = tries.fetch_add(1, Ordering::SeqCst);
+//!                     if prev < 2 { Err::<u8, _>(String::from("temporary")) } else { Ok(0u8) }
 //!                 }
 //!             }
 //!         },
-//!         |_| true,
+//!         is_retryable,
 //!     ).await;
 //!     assert!(res.is_ok());
+//! }
+//! ```
+//!
+//! Macro usage example (predicate path):
+//!
+//! ```no_run
+//! use asyn_retry_policy::retry;
+//! use std::sync::{Arc, atomic::{AtomicU8, Ordering}};
+//!
+//! fn is_retryable(e: &String) -> bool { e == "tmp" }
+//!
+//! #[retry(attempts = 3, predicate = is_retryable)]
+//! async fn attempt_me(tries: Arc<AtomicU8>) -> Result<u8, String> {
+//!     let prev = tries.fetch_add(1, Ordering::SeqCst);
+//!     if prev < 2 { Err(String::from("tmp")) } else { Ok(4u8) }
 //! }
 //! ```
 

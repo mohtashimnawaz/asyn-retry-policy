@@ -9,11 +9,20 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let policy = RetryPolicy::default();
-//!     let mut tries = 0;
-//!     let res = policy.retry(|| async {
-//!         tries += 1;
-//!         if tries < 3 { Err::<(), _>("fail") } else { Ok(()) }
-//!     }, |_| true).await;
+//!     let tries = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0));
+//!     let res = policy.retry(
+//!         {
+//!             let tries = tries.clone();
+//!             move || {
+//!                 let tries = tries.clone();
+//!                 async move {
+//!                     let prev = tries.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+//!                     if prev < 2 { Err::<(), _>("fail") } else { Ok(()) }
+//!                 }
+//!             }
+//!         },
+//!         |_| true,
+//!     ).await;
 //!     assert!(res.is_ok());
 //! }
 //! ```
@@ -92,20 +101,26 @@ impl RetryPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, Ordering};
 
     #[tokio::test]
     async fn retries_and_succeeds() {
         let policy = RetryPolicy::default();
-        let mut tries = 0u8;
+        let tries = Arc::new(AtomicU8::new(0));
         let res = policy
             .retry(
-                || {
-                    async {
-                        tries += 1;
-                        if tries < 3 {
-                            Err("temporary")
-                        } else {
-                            Ok(42u8)
+                {
+                    let tries = tries.clone();
+                    move || {
+                        let tries = tries.clone();
+                        async move {
+                            let prev = tries.fetch_add(1, Ordering::SeqCst);
+                            if prev < 2 {
+                                Err("temporary")
+                            } else {
+                                Ok(42u8)
+                            }
                         }
                     }
                 },
@@ -113,25 +128,29 @@ mod tests {
             )
             .await;
         assert_eq!(res.unwrap(), 42u8);
-        assert_eq!(tries, 3);
+        assert_eq!(tries.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]
     async fn stops_on_non_retryable_error() {
         let policy = RetryPolicy::default();
-        let mut tries = 0u8;
+        let tries = Arc::new(AtomicU8::new(0));
         let res = policy
             .retry(
-                || {
-                    async {
-                        tries += 1;
-                        Err::<u8, _>("fatal")
+                {
+                    let tries = tries.clone();
+                    move || {
+                        let tries = tries.clone();
+                        async move {
+                            tries.fetch_add(1, Ordering::SeqCst);
+                            Err::<u8, _>("fatal")
+                        }
                     }
                 },
                 |_e| false,
             )
             .await;
         assert!(res.is_err());
-        assert_eq!(tries, 1);
+        assert_eq!(tries.load(Ordering::SeqCst), 1);
     }
 }

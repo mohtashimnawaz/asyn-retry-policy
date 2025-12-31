@@ -35,18 +35,31 @@
 //! }
 //! ```
 //!
-//! Macro usage example (predicate path):
+//! Macro usage examples (predicate path and inline closure):
 //!
 //! ```no_run
 //! use asyn_retry_policy::retry;
 //! use std::sync::{Arc, atomic::{AtomicU8, Ordering}};
 //!
-//! fn is_retryable(e: &String) -> bool { e == "tmp" }
+//! fn should_retry(e: &String) -> bool { e == "tmp" }
 //!
-//! #[retry(attempts = 3, predicate = is_retryable)]
-//! async fn attempt_me(tries: Arc<AtomicU8>) -> Result<u8, String> {
+//! #[retry(attempts = 3, predicate = should_retry)]
+//! async fn my_endpoint(tries: Arc<AtomicU8>) -> Result<u8, String> {
 //!     let prev = tries.fetch_add(1, Ordering::SeqCst);
-//!     if prev < 2 { Err(String::from("tmp")) } else { Ok(4u8) }
+//!     if prev < 2 { Err(String::from("tmp")) } else { Ok(7u8) }
+//! }
+//! ```
+//!
+//! Inline closure predicate example:
+//!
+//! ```no_run
+//! use asyn_retry_policy::retry;
+//! use std::sync::{Arc, atomic::{AtomicU8, Ordering}};
+//!
+//! #[retry(predicate = |e: &String| e == "tmp")]
+//! async fn my_endpoint_closure(tries: Arc<AtomicU8>) -> Result<u8, String> {
+//!     let prev = tries.fetch_add(1, Ordering::SeqCst);
+//!     if prev < 2 { Err(String::from("tmp")) } else { Ok(8u8) }
 //! }
 //! ```
 

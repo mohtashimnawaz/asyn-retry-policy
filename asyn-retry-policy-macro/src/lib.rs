@@ -70,11 +70,13 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
                         _ => return syn::Error::new_spanned(expr, "expected integer literal for rng_seed").to_compile_error().into(),
                     },
                     "predicate" => {
-                        // Accept either a bare path (Expr::Path) or a string literal with the path
+                        // Accept a path, a closure, or a string literal with the path
                         match expr {
                             Expr::Path(_) => {
-                                // Use as-is
-                                // We'll store this expression directly in predicate_expr below
+                                predicate_expr = Some(expr);
+                            }
+                            Expr::Closure(_) => {
+                                // inline closure expression is accepted
                                 predicate_expr = Some(expr);
                             }
                             Expr::Lit(syn::ExprLit { lit: Lit::Str(lits), .. }) => {
@@ -85,7 +87,7 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     Err(_) => return syn::Error::new_spanned(lits, "invalid path in string").to_compile_error().into(),
                                 }
                             }
-                            _ => return syn::Error::new_spanned(expr, "expected path or string literal for predicate").to_compile_error().into(),
+                            _ => return syn::Error::new_spanned(expr, "expected path, closure, or string literal for predicate").to_compile_error().into(),
                         }
                     }
                     other => return syn::Error::new_spanned(ident, format!("unknown option `{}`", other)).to_compile_error().into(),

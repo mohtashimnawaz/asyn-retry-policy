@@ -5,13 +5,13 @@ edition = "2024"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "test-util"] }
 # Futures traits and combinators
 futures = "0.3"
 # For async trait objects if needed
 async-trait = "0.1"
 # Jitter/randomness for backoff
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng"] }
 # Simplified error types
 thiserror = "1.0"
 

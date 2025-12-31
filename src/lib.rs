@@ -28,6 +28,8 @@
 //! ```
 
 use rand::Rng;
+use rand::SeedableRng;
+use rand::rngs::SmallRng;
 use std::time::Duration;
 
 // Re-export the proc-macro so users can just write `#[retry]` or `#[retry(3)]` when depending on this crate
@@ -46,6 +48,8 @@ pub struct RetryPolicy {
     pub backoff_factor: f64,
     /// Use random jitter between 0..delay
     pub jitter: bool,
+    /// Optional RNG seed to allow deterministic jitter for testing
+    pub rng_seed: Option<u64>,
 }
 
 impl Default for RetryPolicy {
@@ -56,11 +60,18 @@ impl Default for RetryPolicy {
             max_delay: Duration::from_secs(5),
             backoff_factor: 2.0,
             jitter: true,
+            rng_seed: None,
         }
     }
 }
 
 impl RetryPolicy {
+    /// Compute the exponential backoff (without jitter) clamped by `max_delay`.
+    pub fn compute_backoff(&self, attempt: usize) -> Duration {
+        let exp = self.backoff_factor.powi((attempt - 1) as i32);
+        self.base_delay.mul_f64(exp).min(self.max_delay)
+    }
+
     /// Retry an asynchronous operation described by `f` with this policy.
     ///
     /// `f` must return a `Result<T, E>`. The `should_retry` predicate receives a reference to the error
@@ -78,16 +89,18 @@ impl RetryPolicy {
                 Ok(v) => return Ok(v),
                 Err(e) if attempt < self.attempts && should_retry(&e) => {
                     // Calculate exponential backoff
-                    let exp = self.backoff_factor.powi((attempt - 1) as i32);
-                    let mut delay = self
-                        .base_delay
-                        .mul_f64(exp)
-                        .min(self.max_delay);
+                    let mut delay = self.compute_backoff(attempt);
 
                     // Apply jitter
                     if self.jitter {
                         let max_ms = delay.as_millis().max(1) as u64;
-                        let jitter_ms = rand::thread_rng().gen_range(0..=max_ms);
+                        let jitter_ms = if let Some(seed) = self.rng_seed {
+                            // deterministic per-attempt RNG to keep testability
+                            let mut rng = SmallRng::seed_from_u64(seed.wrapping_add(attempt as u64));
+                            rng.gen_range(0..=max_ms)
+                        } else {
+                            rand::thread_rng().gen_range(0..=max_ms)
+                        };
                         delay = Duration::from_millis(jitter_ms);
                     }
 

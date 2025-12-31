@@ -4,18 +4,73 @@ use syn::{parse_macro_input, ItemFn, Lit, Expr};
 
 #[proc_macro_attribute]
 pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
-    // Support either empty `#[retry]` (defaults to 3) or a single integer `#[retry(3)]`.
+    // Supported attribute forms:
+    // - empty: `#[retry]`
+    // - single integer: `#[retry(3)]`
+    // - named args: `#[retry(attempts = 3, base_delay_ms = 100, max_delay_ms = 5000, backoff_factor = 2.0, jitter = true, rng_seed = 42)]`
+
     let mut attempts: Option<usize> = None;
+    let mut base_delay_ms: Option<u64> = None;
+    let mut max_delay_ms: Option<u64> = None;
+    let mut backoff_factor: Option<f64> = None;
+    let mut jitter_opt: Option<bool> = None;
+    let mut rng_seed: Option<u64> = None;
+
     if !attr.is_empty() {
-        match syn::parse::<Expr>(attr.clone()) {
-            Ok(Expr::Lit(syn::ExprLit { lit: Lit::Int(litint), .. })) => {
-                match litint.base10_parse::<usize>() {
-                    Ok(n) => attempts = Some(n),
-                    Err(_) => return syn::Error::new_spanned(litint, "invalid integer").to_compile_error().into(),
+        // try simple integer form first
+        if let Ok(Expr::Lit(syn::ExprLit { lit: Lit::Int(litint), .. })) = syn::parse::<Expr>(attr.clone()) {
+            attempts = Some(litint.base10_parse::<usize>().unwrap_or(3));
+        } else {
+            // parse named args using a simple key = expr parser
+            struct KeyVals(Vec<(syn::Ident, syn::Expr)>);
+
+            impl syn::parse::Parse for KeyVals {
+                fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+                    let mut out = Vec::new();
+                    while !input.is_empty() {
+                        let key: syn::Ident = input.parse()?;
+                        input.parse::<syn::Token![=]>()?;
+                        let expr: syn::Expr = input.parse()?;
+                        out.push((key, expr));
+                        if input.peek(syn::Token![,]) {
+                            let _ = input.parse::<syn::Token![,]>()?;
+                        }
+                    }
+                    Ok(KeyVals(out))
                 }
             }
-            Ok(_) => return syn::Error::new(proc_macro2::Span::call_site(), "unsupported attribute form; expected `N` or empty").to_compile_error().into(),
-            Err(_) => return syn::Error::new(proc_macro2::Span::call_site(), "failed to parse attribute; expected integer literal like `#[retry(3)]`").to_compile_error().into(),
+
+            let args = parse_macro_input!(attr as KeyVals);
+            for (ident, expr) in args.0 {
+                match ident.to_string().as_str() {
+                    "attempts" => match expr {
+                        Expr::Lit(syn::ExprLit { lit: Lit::Int(litint), .. }) => attempts = Some(litint.base10_parse::<usize>().unwrap()),
+                        _ => return syn::Error::new_spanned(expr, "expected integer literal").to_compile_error().into(),
+                    },
+                    "base_delay_ms" => match expr {
+                        Expr::Lit(syn::ExprLit { lit: Lit::Int(litint), .. }) => base_delay_ms = Some(litint.base10_parse::<u64>().unwrap()),
+                        _ => return syn::Error::new_spanned(expr, "expected integer literal for base_delay_ms").to_compile_error().into(),
+                    },
+                    "max_delay_ms" => match expr {
+                        Expr::Lit(syn::ExprLit { lit: Lit::Int(litint), .. }) => max_delay_ms = Some(litint.base10_parse::<u64>().unwrap()),
+                        _ => return syn::Error::new_spanned(expr, "expected integer literal for max_delay_ms").to_compile_error().into(),
+                    },
+                    "backoff_factor" => match expr {
+                        Expr::Lit(syn::ExprLit { lit: Lit::Float(litf), .. }) => backoff_factor = Some(litf.base10_parse::<f64>().unwrap()),
+                        Expr::Lit(syn::ExprLit { lit: Lit::Int(liti), .. }) => backoff_factor = Some(liti.base10_parse::<f64>().unwrap()),
+                        _ => return syn::Error::new_spanned(expr, "expected numeric literal for backoff_factor").to_compile_error().into(),
+                    },
+                    "jitter" => match expr {
+                        Expr::Lit(syn::ExprLit { lit: Lit::Bool(litb), .. }) => jitter_opt = Some(litb.value),
+                        _ => return syn::Error::new_spanned(expr, "expected boolean literal for jitter").to_compile_error().into(),
+                    },
+                    "rng_seed" => match expr {
+                        Expr::Lit(syn::ExprLit { lit: Lit::Int(litint), .. }) => rng_seed = Some(litint.base10_parse::<u64>().unwrap()),
+                        _ => return syn::Error::new_spanned(expr, "expected integer literal for rng_seed").to_compile_error().into(),
+                    },
+                    other => return syn::Error::new_spanned(ident, format!("unknown option `{}`", other)).to_compile_error().into(),
+                }
+            }
         }
     }
 
@@ -48,10 +103,29 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Build the new function body that wraps the original body inside a RetryPolicy::retry call
     // We'll reference the runtime crate as `::asyn_retry_policy::RetryPolicy`
 
+    // Build policy initializer fields
+    let mut fields = Vec::new();
+    fields.push(quote! { attempts: #attempts });
+    if let Some(ms) = base_delay_ms {
+        fields.push(quote! { base_delay: ::std::time::Duration::from_millis(#ms) });
+    }
+    if let Some(ms) = max_delay_ms {
+        fields.push(quote! { max_delay: ::std::time::Duration::from_millis(#ms) });
+    }
+    if let Some(f) = backoff_factor {
+        fields.push(quote! { backoff_factor: #f });
+    }
+    if let Some(b) = jitter_opt {
+        fields.push(quote! { jitter: #b });
+    }
+    if let Some(seed) = rng_seed {
+        fields.push(quote! { rng_seed: Some(#seed) });
+    }
+
     let expanded = quote! {
         #(#attrs)*
         #vis #sig {
-            let policy = ::asyn_retry_policy::RetryPolicy { attempts: #attempts, ..Default::default() };
+            let policy = ::asyn_retry_policy::RetryPolicy { #(#fields),*, ..Default::default() };
             policy.retry(|| {
                 #(#clones)*
                 async move #block

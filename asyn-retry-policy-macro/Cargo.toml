@@ -2,7 +2,12 @@
 name = "asyn-retry-policy-macro"
 version = "0.1.0"
 edition = "2024"
-publish = false
+description = "Proc-macro attribute providing `#[retry]` for ergonomic async retrying."
+homepage = "https://github.com/YOUR_GITHUB_USER/asyn-retry-policy"
+repository = "https://github.com/YOUR_GITHUB_USER/asyn-retry-policy"
+documentation = "https://docs.rs/asyn-retry-policy-macro"
+license = "MIT"
+authors = ["Your Name <you@example.com>"]
 
 [lib]
 proc-macro = true

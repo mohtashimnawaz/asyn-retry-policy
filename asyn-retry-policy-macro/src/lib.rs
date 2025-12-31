@@ -15,6 +15,7 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut backoff_factor: Option<f64> = None;
     let mut jitter_opt: Option<bool> = None;
     let mut rng_seed: Option<u64> = None;
+    let mut predicate_expr: Option<syn::Expr> = None;
 
     if !attr.is_empty() {
         // try simple integer form first
@@ -68,6 +69,25 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
                         Expr::Lit(syn::ExprLit { lit: Lit::Int(litint), .. }) => rng_seed = Some(litint.base10_parse::<u64>().unwrap()),
                         _ => return syn::Error::new_spanned(expr, "expected integer literal for rng_seed").to_compile_error().into(),
                     },
+                    "predicate" => {
+                        // Accept either a bare path (Expr::Path) or a string literal with the path
+                        match expr {
+                            Expr::Path(_) => {
+                                // Use as-is
+                                // We'll store this expression directly in predicate_expr below
+                                predicate_expr = Some(expr);
+                            }
+                            Expr::Lit(syn::ExprLit { lit: Lit::Str(lits), .. }) => {
+                                // Parse string into a path
+                                let s = lits.value();
+                                match s.parse::<syn::Path>() {
+                                    Ok(p) => predicate_expr = Some(Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: p })),
+                                    Err(_) => return syn::Error::new_spanned(lits, "invalid path in string").to_compile_error().into(),
+                                }
+                            }
+                            _ => return syn::Error::new_spanned(expr, "expected path or string literal for predicate").to_compile_error().into(),
+                        }
+                    }
                     other => return syn::Error::new_spanned(ident, format!("unknown option `{}`", other)).to_compile_error().into(),
                 }
             }
@@ -122,6 +142,13 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
         fields.push(quote! { rng_seed: Some(#seed) });
     }
 
+    // predicate expression to use as the retry predicate; defaults to `|_| true`
+    let predicate_tokens = if let Some(pred) = predicate_expr {
+        quote! { #pred }
+    } else {
+        quote! { |_| true }
+    };
+
     let expanded = quote! {
         #(#attrs)*
         #vis #sig {
@@ -129,7 +156,7 @@ pub fn retry(attr: TokenStream, item: TokenStream) -> TokenStream {
             policy.retry(|| {
                 #(#clones)*
                 async move #block
-            }, |_| true).await
+            }, #predicate_tokens).await
         }
     };
 

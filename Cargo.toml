@@ -14,3 +14,6 @@ async-trait = "0.1"
 rand = "0.8"
 # Simplified error types
 thiserror = "1.0"
+
+# Proc-macro crate providing the `#[retry]` attribute
+asyn-retry-policy-macro = { path = "asyn-retry-policy-macro" }

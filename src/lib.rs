@@ -30,6 +30,9 @@
 use rand::Rng;
 use std::time::Duration;
 
+// Re-export the proc-macro so users can just write `#[retry]` or `#[retry(3)]` when depending on this crate
+pub use asyn_retry_policy_macro::retry;
+
 /// Retry policy configuration
 #[derive(Clone, Debug)]
 pub struct RetryPolicy {
@@ -152,5 +155,39 @@ mod tests {
             .await;
         assert!(res.is_err());
         assert_eq!(tries.load(Ordering::SeqCst), 1);
+    }
+
+    // === Macro tests ===
+
+    #[retry(3)]
+    async fn macro_retries_and_succeeds(tries: std::sync::Arc<std::sync::atomic::AtomicU8>) -> Result<u8, &'static str> {
+        let prev = tries.fetch_add(1, Ordering::SeqCst);
+        if prev < 2 {
+            Err("temporary")
+        } else {
+            Ok(99u8)
+        }
+    }
+
+    #[tokio::test]
+    async fn macro_test_retries_and_succeeds() {
+        let tries = Arc::new(AtomicU8::new(0));
+        let res = macro_retries_and_succeeds(tries.clone()).await;
+        assert_eq!(res.unwrap(), 99u8);
+        assert_eq!(tries.load(Ordering::SeqCst), 3);
+    }
+
+    #[retry]
+    async fn macro_defaults_to_three_attempts(tries: std::sync::Arc<std::sync::atomic::AtomicU8>) -> Result<u8, &'static str> {
+        let prev = tries.fetch_add(1, Ordering::SeqCst);
+        if prev < 2 { Err("nope") } else { Ok(7u8) }
+    }
+
+    #[tokio::test]
+    async fn macro_default_attempts() {
+        let tries = Arc::new(AtomicU8::new(0));
+        let res = macro_defaults_to_three_attempts(tries.clone()).await;
+        assert_eq!(res.unwrap(), 7u8);
+        assert_eq!(tries.load(Ordering::SeqCst), 3);
     }
 }

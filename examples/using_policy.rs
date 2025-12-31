@@ -15,7 +15,7 @@ async fn main() {
                 let tries = tries.clone();
                 async move {
                     let prev = tries.fetch_add(1, Ordering::SeqCst);
-                    if prev < 2 { Err::<u8, _>("temp") } else { Ok(()) }
+                    if prev < 2 { Err::<u8, _>("temp") } else { Ok(0u8) }
                 }
             }
         },

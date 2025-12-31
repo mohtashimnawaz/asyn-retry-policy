@@ -9,6 +9,7 @@ documentation = "https://docs.rs/asyn-retry-policy"
 keywords = ["retry", "backoff", "jitter", "async", "tokio", "procedural-macro"]
 categories = ["asynchronous", "network-programming", "development-tools"]
 license = "MIT"
+license-file = "LICENSE"
 authors = ["Mohtashim Nawaz"]
 
 [dependencies]
@@ -24,4 +25,4 @@ rand = { version = "0.8", features = ["small_rng"] }
 thiserror = "1.0"
 
 # Proc-macro crate providing the `#[retry]` attribute
-asyn-retry-policy-macro = "0.1.0"
+asyn-retry-policy-macro = { path = "asyn-retry-policy-macro" }

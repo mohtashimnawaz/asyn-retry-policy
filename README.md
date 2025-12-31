@@ -1,5 +1,7 @@
 # asyn-retry-policy 🕸️
 
+[![crates.io](https://img.shields.io/crates/v/asyn-retry-policy)](https://crates.io/crates/asyn-retry-policy) [![docs.rs](https://img.shields.io/docsrs/asyn-retry-policy)](https://docs.rs/asyn-retry-policy) [![CI](https://github.com/YOUR_GITHUB_USER/asyn-retry-policy/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USER/asyn-retry-policy/actions) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A small, ergonomic crate that provides async retry behavior with exponential backoff and optional jitter.
 
 Features
@@ -7,6 +9,19 @@ Features
 - Ergonomic macro: `#[retry]` or `#[retry(N)]` and named options (e.g., `attempts`, `base_delay_ms`, `max_delay_ms`, `backoff_factor`, `jitter`, `rng_seed`, `predicate`).
 
 Quick examples
+
+---
+
+## Publishing
+
+Publishing order and tips:
+
+1. The proc-macro crate (`asyn-retry-policy-macro`) must be published first to crates.io because the main crate depends on it by version.
+2. Locally you can verify packaging with `cd asyn-retry-policy-macro && cargo publish --dry-run`, then `cargo publish` to actually publish.
+3. After the macro crate is published, return to the root and run `cargo publish` to publish `asyn-retry-policy`.
+4. Alternatively, set `CARGO_REGISTRY_TOKEN` as a GitHub secret and use the included GitHub Actions workflow (`.github/workflows/publish.yml`) to publish automatically when creating a release.
+
+---
 
 Programmatic example with a predicate (owned `String` error type):
 
